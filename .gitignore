@@ -7,3 +7,11 @@
 .squad/.cache/
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
+
+# Azure Developer CLI local environment state and generated artifacts
+.azure/*/
+.env
+.env.*
+!.env.example
+*.bicep.cache
+infra/*.jsonc

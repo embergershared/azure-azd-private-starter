@@ -1,0 +1,68 @@
+name: Infrastructure validation
+
+on:
+  pull_request:
+    paths:
+      - ".azure/**"
+      - ".github/instructions/**"
+      - ".github/workflows/infra-validation.yml"
+      - "infra/**"
+      - "scripts/**"
+      - "azure.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse JSON
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Path . -Recurse -File -Filter *.json |
+            ForEach-Object {
+              try {
+                Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json -ErrorAction Stop | Out-Null
+              }
+              catch {
+                throw "Invalid JSON in $($_.FullName): $($_.Exception.Message)"
+              }
+            }
+
+      - name: Check PowerShell syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem scripts -File -Filter *.ps1 |
+            ForEach-Object {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                $_.FullName,
+                [ref]$tokens,
+                [ref]$errors
+              ) | Out-Null
+              if ($errors.Count -gt 0) {
+                $errors | ForEach-Object { Write-Error $_ }
+                exit 1
+              }
+            }
+
+      - name: Build Bicep
+        run: az bicep build --file infra/main.bicep
+
+      - name: Check Bicep formatting
+        shell: pwsh
+        run: |
+          Get-ChildItem infra -Recurse -Filter *.bicep | ForEach-Object {
+            $formatted = @(& az bicep format --file $_.FullName --stdout) -join [Environment]::NewLine
+            $current = Get-Content -LiteralPath $_.FullName -Raw
+            if ($formatted.TrimEnd() -ne $current.TrimEnd()) {
+              throw "$($_.FullName) is not formatted."
+            }
+          }

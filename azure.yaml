@@ -1,0 +1,20 @@
+name: azure-azd-private-starter
+metadata:
+  template: azure-azd-private-starter@0.1.0
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+hooks:
+  preprovision:
+    shell: pwsh
+    run: |
+      $profile = azd env get-value DEPLOYMENT_PROFILE 2>$null
+      if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($profile)) {
+        azd env set DEPLOYMENT_PROFILE minimal
+        if ($LASTEXITCODE -ne 0) { throw "Unable to initialize DEPLOYMENT_PROFILE." }
+      }
+      ./scripts/set-deployment-tags.ps1
+      ./scripts/preflight.ps1
